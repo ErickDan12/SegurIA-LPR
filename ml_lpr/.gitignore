@@ -1,0 +1,13 @@
+# Entorno
+venv/
+__pycache__/
+
+# Datos que no se subiran
+dataset_roboflow/
+datos_ppu_chile/
+*.csv
+
+# Resultados de entrenamiento y modelos
+runs/
+*.pt
+*.onnx
