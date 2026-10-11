@@ -19,3 +19,12 @@
 | Versión | Fecha | Conjunto | OCR | Preprocesamiento | Exactitud | Observaciones |
 |---|---|---|---|---|---|---|
 | ocr_v1 | 04/10/2026 | desarrollo (9 imgs) | EasyOCR (en) | gris, x3, CLAHE, margen 5% | 5/9 (56%) | Orden por posición y filtro por altura corrigen "CHILE" y el orden. Fallos restantes: caracteres extra pegados (bordes o emblema separador). |
+
+
+## Conjuntos de datos reales
+
+- Origen: 250 capturas (imagen completa + recorte) de cámara de acceso, patente según nombre del archivo (lectura del sistema LPR de referencia).
+- 207 vehículos distintos; 6 motos excluidas (fuera de alcance).
+- Desarrollo: 30 vehículos (OCR). Test: 174 vehículos, revisados a mano.
+- Revisión del test: 1 descartada por ilegible; 5 duplicados del mismo vehículo con lecturas distintas del sistema de referencia (confusiones S/G, R/P, 2/7), detectados por patentes que difieren en un carácter.
+- La marca, el color y la pista registrados por el sistema de referencia no son confiables (el mismo vehículo aparece con marcas distintas).
