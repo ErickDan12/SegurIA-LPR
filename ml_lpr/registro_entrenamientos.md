@@ -28,3 +28,5 @@
 - Desarrollo: 30 vehículos (OCR). Test: 174 vehículos, revisados a mano.
 - Revisión del test: 1 descartada por ilegible; 5 duplicados del mismo vehículo con lecturas distintas del sistema de referencia (confusiones S/G, R/P, 2/7), detectados por patentes que difieren en un carácter.
 - La marca, el color y la pista registrados por el sistema de referencia no son confiables (el mismo vehículo aparece con marcas distintas).
+
+| v1_roboflow_n640 (test real) | 11/10/2026 | Imágenes reales cámara de acceso (173 imgs, 182 patentes) | yolov8n | – | – | – | 1,000 | 0,982 | 0,995 | 0,598 | Primera evaluación con imágenes reales etiquetadas a mano. Detección resuelta sin reentrenar; mAP50-95 menor por diferencias en el ajuste de bordes. |  
