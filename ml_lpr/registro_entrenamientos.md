@@ -19,3 +19,19 @@
 | Versión | Fecha | Conjunto | OCR | Preprocesamiento | Exactitud | Observaciones |
 |---|---|---|---|---|---|---|
 | ocr_v1 | 04/10/2026 | desarrollo (9 imgs) | EasyOCR (en) | gris, x3, CLAHE, margen 5% | 5/9 (56%) | Orden por posición y filtro por altura corrigen "CHILE" y el orden. Fallos restantes: caracteres extra pegados (bordes o emblema separador). |
+
+
+## Conjuntos de datos reales
+
+- Origen: 250 capturas (imagen completa + recorte) de cámara de acceso, patente según nombre del archivo (lectura del sistema LPR de referencia).
+- 207 vehículos distintos; 6 motos excluidas (fuera de alcance).
+- Desarrollo: 30 vehículos (OCR). Test: 174 vehículos, revisados a mano.
+- Revisión del test: 1 descartada por ilegible; 5 duplicados del mismo vehículo con lecturas distintas del sistema de referencia (confusiones S/G, R/P, 2/7), detectados por patentes que difieren en un carácter.
+- La marca, el color y la pista registrados por el sistema de referencia no son confiables (el mismo vehículo aparece con marcas distintas).
+
+| v1_roboflow_n640 (test real) | 11/10/2026 | Imágenes reales cámara de acceso (173 imgs, 182 patentes) | yolov8n | – | – | – | 1,000 | 0,982 | 0,995 | 0,598 | Primera evaluación con imágenes reales etiquetadas a mano. Detección resuelta sin reentrenar; mAP50-95 menor por diferencias en el ajuste de bordes. |  
+
+| ocr_v1 | 11/10/2026 | desarrollo (30 imgs) | EasyOCR (en) | gris, x3, CLAHE, margen 5% | 11/30 (37%) | Fallos por bordes, separadores y letra W. |
+| ocr_v2 | 11/10/2026 | desarrollo (30 imgs) | EasyOCR (en) | + limpieza por componentes (v2) | 6/30 (20%) | Corrige separadores, pero agrega restos del marco en los extremos. |
+| ocr_v3 | 11/10/2026 | desarrollo (30 imgs) | EasyOCR (en) | combinado (base; limpio si base no valida) | 14/30 (47%) | Mejor resultado con EasyOCR. |
+| ocr_v4 | 11/10/2026 | desarrollo (30 imgs) | fast-plate-ocr cct-s-v2-global (ONNX, CPU) | recorte crudo, margen 5% | 30/30 (100%) | OCR especializado en patentes. Elegido para el sistema. |
