@@ -30,3 +30,8 @@
 - La marca, el color y la pista registrados por el sistema de referencia no son confiables (el mismo vehículo aparece con marcas distintas).
 
 | v1_roboflow_n640 (test real) | 11/10/2026 | Imágenes reales cámara de acceso (173 imgs, 182 patentes) | yolov8n | – | – | – | 1,000 | 0,982 | 0,995 | 0,598 | Primera evaluación con imágenes reales etiquetadas a mano. Detección resuelta sin reentrenar; mAP50-95 menor por diferencias en el ajuste de bordes. |  
+
+| ocr_v1 | 11/10/2026 | desarrollo (30 imgs) | EasyOCR (en) | gris, x3, CLAHE, margen 5% | 11/30 (37%) | Fallos por bordes, separadores y letra W. |
+| ocr_v2 | 11/10/2026 | desarrollo (30 imgs) | EasyOCR (en) | + limpieza por componentes (v2) | 6/30 (20%) | Corrige separadores, pero agrega restos del marco en los extremos. |
+| ocr_v3 | 11/10/2026 | desarrollo (30 imgs) | EasyOCR (en) | combinado (base; limpio si base no valida) | 14/30 (47%) | Mejor resultado con EasyOCR. |
+| ocr_v4 | 11/10/2026 | desarrollo (30 imgs) | fast-plate-ocr cct-s-v2-global (ONNX, CPU) | recorte crudo, margen 5% | 30/30 (100%) | OCR especializado en patentes. Elegido para el sistema. |
