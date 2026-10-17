@@ -11,3 +11,4 @@ datos_ppu_chile/
 runs/
 *.pt
 *.onnx
+*_ncnn_model/

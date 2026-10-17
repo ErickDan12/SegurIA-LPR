@@ -63,3 +63,18 @@
 - **Patentes de formato antiguo:** cuando el texto calza con ambos formatos, la validación elige el nuevo. Hay que definir una estrategia y probarla en el conjunto de desarrollo, agregándole más patentes antiguas. No se debe ajustar mirando el test.
 - **Selección de la patente:** el área de la caja no basta cuando hay detecciones duplicadas u holgadas. Alternativas a probar en desarrollo: elegir la caja más baja en la imagen (en una cámara elevada, el vehículo más cercano aparece más abajo) o combinar área y confianza.
 - **Confusión C/G:** se repite en 2 casos, y también aparece en el sistema de referencia (S/G).
+
+## Despliegue en Raspberry Pi 4 (4 GB)
+
+- Entorno: Raspberry Pi OS Lite 64-bit (Debian 13), Python 3.13, PyTorch versión CPU, Ultralytics, fast-plate-ocr (ONNX, CPU).
+- Modelo exportado a NCNN (imgsz=640) desde el `.pt` v1.
+- Prueba con el conjunto de desarrollo (30 imágenes), pipeline completo con la regla de la caja más grande:
+
+| Formato | Detección | OCR | Total por imagen | Imágenes/s | Exactitud |
+|---|---|---|---|---|---|
+| NCNN | 376 ms | 146 ms | 522 ms | 1,9 | 29/30 |
+| PyTorch (.pt) | 929 ms | 149 ms | 1.078 ms | 0,9 | 29/30 |
+
+- NCNN es 2,5 veces más rápido en la detección, sin pérdida de exactitud: es el formato elegido para el despliegue.
+- La carga inicial del modelo toma alrededor de 4 s; en operación ocurre una sola vez, al iniciar el servicio.
+- Fallo SBWC79 → TTDY78: con la regla de la caja más grande se seleccionó otra patente (a confirmar visualmente). En el PC, con la regla de mayor confianza, se leía bien.
