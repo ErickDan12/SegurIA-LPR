@@ -11,17 +11,19 @@ from flask import Flask, Response, jsonify
 from ultralytics import YOLO
 
 from lpr_comun import BASE, LectorCamara, LectorCamaraFFmpeg, leer_patente, url_camara
+import logging
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 MODELO = BASE / "modelos" / "v1_roboflow_n640_ncnn_model"
 STREAM = "stream2"
 USAR_FFMPEG = False      # con stream2 basta el lector de OpenCV
-ENVIAR_AL_BACKEND = False # False = solo visor, sin registrar en el backend
-CONFIRMACIONES = 2       # lecturas iguales seguidas para validar una patente
-ESPERA_REPETIDA = 30     # segundos sin ver la patente antes de volver a informarla
+ENVIAR_AL_BACKEND = True
 ANCHO_VISOR = 640
 FPS_VISOR = 3
 TEMPORAL = Path("/dev/shm/recorte_tmp.jpg")  # en RAM: evita desgastar la microSD
-
+CONFIRMACIONES = 2       # lecturas iguales seguidas para validar una patente
+ESPERA_REPETIDA = 30     # segundos sin ver la patente antes de volver a informarla
+CONF_MIN_OCR = 90        # bajo esto la lectura se marca BAJA y no se envía al backend
 COLORES = {"autorizado": "#22c55e", "visita": "#3b82f6", "denegado": "#ef4444"}
 
 
@@ -42,6 +44,9 @@ estado = Estado()
 camara = None
 backend = None
 
+def parecida(a, b, max_diferencias=2):
+    """True si dos patentes del mismo largo difieren en pocos caracteres (posible error de lectura)."""
+    return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) <= max_diferencias
 
 def procesar():
     """Hilo de análisis: lee patentes del último cuadro y aplica confirmación y espera."""
@@ -62,7 +67,10 @@ def procesar():
         ahora = time.time()
         confirmada = False
 
-        if patente is None:
+        # Lectura dudosa: se muestra en el visor, pero no cuenta para confirmar
+        dudosa = patente is not None and (confianza is None or confianza < CONF_MIN_OCR)
+
+        if patente is None or dudosa:
             candidata, conteo = None, 0
             if caja is None:
                 time.sleep(0.5)  # sin patente a la vista: analizar menos seguido
@@ -75,25 +83,31 @@ def procesar():
             else:
                 candidata, conteo = patente, 1
             if conteo >= CONFIRMACIONES:
-                ultima_vez[patente] = ahora
                 candidata, conteo = None, 0
                 confirmada = True
-                resultado = backend.registrar_deteccion(patente, confianza, cuadro, caja) if backend else "sin backend"
-                evento = {"patente": patente, "confianza": confianza, "resultado": resultado,
-                          "hora": datetime.now().isoformat(timespec="seconds")}
-                print(f"[{evento['hora']}] PATENTE DETECTADA: {patente} ({confianza}%) -> {resultado}")
-                with estado.lock:
-                    estado.eventos.appendleft(evento)
+                similar = next((p for p, t in ultima_vez.items()
+                                if ahora - t < ESPERA_REPETIDA and parecida(p, patente)), None)
+                if similar:
+                    # Variante de una patente recién informada: mismo vehículo, no se envía
+                    ultima_vez[similar] = ahora
+                    print(f"  {patente} descartada: parecida a {similar}, ya informada")
+                else:
+                    ultima_vez[patente] = ahora
+                    resultado = backend.registrar_deteccion(patente, confianza, cuadro, caja) if backend else "sin backend"
+                    evento = {"patente": patente, "confianza": confianza, "resultado": resultado,
+                              "hora": datetime.now().isoformat(timespec="seconds")}
+                    print(f"[{evento['hora']}] PATENTE DETECTADA: {patente} ({confianza}%) -> {resultado}")
+                    with estado.lock:
+                        estado.eventos.appendleft(evento)
 
         with estado.lock:
             estado.lectura = {"crudo": crudo or "", "patente": patente or "", "confianza": confianza,
                               "ms": round(ms), "hora": datetime.now().strftime("%H:%M:%S")}
             if caja:
                 estado.caja = caja
-                estado.texto_caja = f"{patente or crudo} {'OK' if confirmada else '?'}"
+                estado.texto_caja = f"{patente or crudo} {'OK' if confirmada else ('BAJA' if dudosa else '?')}"
                 estado.color = (0, 200, 0) if confirmada else (0, 200, 255)
                 estado.hora_caja = ahora
-
 
 def generar_video():
     """Envía el video en vivo (MJPEG) con la última caja dibujada encima."""
@@ -102,6 +116,7 @@ def generar_video():
         if cuadro is None:
             time.sleep(0.1)
             continue
+        cuadro = cuadro.copy()  # dibujar sobre una copia, no sobre el cuadro compartido
         with estado.lock:
             caja, texto, color, hora = estado.caja, estado.texto_caja, estado.color, estado.hora_caja
         if caja and time.time() - hora < 1.5:

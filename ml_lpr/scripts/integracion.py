@@ -19,9 +19,21 @@ COLA = BASE / "cola"
 COLA_ERRORES = COLA / "errores"
 HEARTBEAT_S = 60      # cada cuánto avisa que está vivo
 REINTENTO_S = 15      # espera antes de reintentar un envío fallido
-TIMEOUT_S = 90        # el plan gratuito de Render puede tardar en "despertar"
+TIMEOUT_S = 90  
+PAUSA_CREDENCIALES_S = 300  # 401/403: hay que revisar la configuración, no reintentar en bucle}
 ESPACIO = "/dispositivos"
 
+def ip_local():
+    """IP de la Raspberry Pi en la red local (no envía datos: solo consulta la ruta de salida)."""
+    import socket as red
+    try:
+        s = red.socket(red.AF_INET, red.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return None
 
 def imagen_compuesta(cuadro, caja, calidad=80):
     """Escena completa con la patente marcada y su recorte ampliado en la esquina superior derecha."""
@@ -172,17 +184,25 @@ class ClienteBackend:
                 # Datos rechazados o equipo mal configurado: se aparta para revisarlo, no se reintenta en bucle
                 print(f"[backend] Rechazado ({r.status_code}): {r.text[:200]} -> movido a cola/errores")
                 archivo.replace(COLA_ERRORES / archivo.name)
+            elif r.status_code in (401, 403):
+                print(f"[backend] Credenciales rechazadas o recinto desactivado ({r.status_code}). "
+                      f"Revisa servidor.ini. Reintento en {PAUSA_CREDENCIALES_S // 60} min.")
+                time.sleep(PAUSA_CREDENCIALES_S)       
             else:
                 print(f"[backend] Error {r.status_code}: {r.text[:200]}; se reintentará en {REINTENTO_S} s")
                 time.sleep(REINTENTO_S)
 
     # ----- Señal de vida -----
-
     def _latido(self):
         while True:
+            espera = HEARTBEAT_S
             try:
-                requests.post(f"{self.url}/api/dispositivos/equipo/heartbeat",
-                              json={}, headers=self.headers, timeout=TIMEOUT_S)
+                ip = ip_local()
+                r = requests.post(f"{self.url}/api/dispositivos/equipo/heartbeat",
+                                  json={"ip": ip} if ip else {}, headers=self.headers, timeout=TIMEOUT_S)
+                if r.status_code in (401, 403):
+                    print(f"[backend] Heartbeat rechazado ({r.status_code}): revisa servidor.ini")
+                    espera = PAUSA_CREDENCIALES_S
             except Exception as e:
                 print(f"[backend] Heartbeat falló ({e})")
-            time.sleep(HEARTBEAT_S)
+            time.sleep(espera)
