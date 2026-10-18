@@ -12,3 +12,5 @@ runs/
 *.pt
 *.onnx
 *_ncnn_model/
+*.zip
+camara.ini
