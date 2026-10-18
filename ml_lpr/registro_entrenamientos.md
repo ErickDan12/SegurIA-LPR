@@ -98,3 +98,42 @@
 - Sistema completo: 167/173 (96,5%). Escenas aplicables: 167/172 (97,1%). OCR por separado: 164/173 (94,8%).
 - Se corrigen XB8835 y YL2154: el OCR las leía correctamente y la validación v1 las forzaba al formato nuevo. El pendiente de patentes de formato antiguo queda resuelto.
 - Fallos restantes (6): selección de vehículo 2 (SFXR46, CPZT69), confusión de carácter 3 (CRLV45, CZZD27, FKHZ86), detección 1 (PLDW22).
+
+## Integración con el backend: prueba de punta a punta (17–18/10/2026)
+
+### Configuración
+- Recinto de prueba en producción: "Condominio Prueba SegurIA".
+- Equipo `RPI-SEGURIA-01` asociado a la cámara "Acceso principal" (Entrada).
+- Credenciales en `servidor.ini` (chmod 600, fuera del repo).
+- Reloj sincronizado por NTP, zona America/Santiago.
+- Conexión verificada: Socket.io conectado y lista completa recibida (2 patentes).
+
+### Resultados (patentes mostradas en la pantalla de un celular)
+
+| Hora  | Patente | Situación en el panel                    | Resultado  | Correcto |
+|-------|---------|------------------------------------------|------------|----------|
+| 11:50 | BBBB10  | Vehículo de propietario (Depto 121)      | Autorizado | Sí |
+| 11:51 | XH6640  | No registrada                            | Denegado + alerta al guardia | Sí |
+| 11:53 | BKXZ83  | Visita aún no vigente (ventana 11:55–11:58) | Denegado | Sí |
+| 11:56 | BKXZ83  | Visita vigente                           | Visita     | Sí |
+| 11:58 | GKSB78  | Visita vencida                           | Denegado   | Sí |
+
+- 5/5 resultados correctos. Confianza OCR: 100% en todos los casos.
+- Verificado en el frontend: imagen compuesta (escena + recorte), monitor del
+  guardia, historial de accesos, alerta pendiente con acciones Autorizar/Rechazar.
+
+### Problemas encontrados y corregidos
+- `servidor.ini` no existía (nano se cerró sin guardar): se creó y protegió.
+- `NameError: CONF_MIN_OCR` en `visor_web.py`: faltaba definir la constante.
+- El visor dibujaba sobre el cuadro compartido: se dibuja sobre una copia.
+
+### Arranque automático
+- Servicio systemd `seguria-lpr` (copia en `deploy/seguria-lpr.service`).
+- Probado con reinicio: el sistema arranca solo, sin intervención por SSH.
+- Si el proceso termina, systemd lo relanza a los 10 s.
+
+### Limitaciones de esta prueba
+- Las patentes en pantalla de celular son imágenes limpias: la confianza de 100%
+  no representa condiciones reales.
+- Pendiente: pruebas con auto real, de noche y a distancia; cola offline;
+  reconexión de cámara; calibración de `CONF_MIN_OCR` (hoy 90).
