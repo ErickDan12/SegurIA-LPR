@@ -91,3 +91,10 @@
 - Medidas para evitar cuadros atrasados: un hilo de lectura que guarda solo el cuadro más reciente, transporte RTSP por TCP y reconexión automática.
 - Reglas en vivo: confirmación (2 lecturas iguales seguidas) y espera de 30 s desde la última vez que se vio la patente.
 - Visor web de diagnóstico (Flask + MJPEG) para probar distancias y ángulos.
+
+### Reevaluación con validación v2 (17/10/2026)
+
+- Cambio: si el texto del OCR ya calza con un formato chileno válido, se respeta tal cual; las correcciones por posición solo se aplican si no calza con ninguno. El error se detectó en la prueba en vivo con la cámara (XH6640 se convertía en XHGG40), no mirando el test.
+- Sistema completo: 167/173 (96,5%). Escenas aplicables: 167/172 (97,1%). OCR por separado: 164/173 (94,8%).
+- Se corrigen XB8835 y YL2154: el OCR las leía correctamente y la validación v1 las forzaba al formato nuevo. El pendiente de patentes de formato antiguo queda resuelto.
+- Fallos restantes (6): selección de vehículo 2 (SFXR46, CPZT69), confusión de carácter 3 (CRLV45, CZZD27, FKHZ86), detección 1 (PLDW22).
