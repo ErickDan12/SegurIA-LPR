@@ -78,3 +78,16 @@
 - NCNN es 2,5 veces más rápido en la detección, sin pérdida de exactitud: es el formato elegido para el despliegue.
 - La carga inicial del modelo toma alrededor de 4 s; en operación ocurre una sola vez, al iniciar el servicio.
 - Fallo SBWC79 → TTDY78: con la regla de la caja más grande se seleccionó otra patente (a confirmar visualmente). En el PC, con la regla de mayor confianza, se leía bien.
+
+## Lectura en vivo desde la cámara (Tapo C310 por RTSP)
+
+| Configuración | Resolución | Atraso aproximado | Lectura de patentes |
+|---|---|---|---|
+| stream1 + OpenCV (decodificación por procesador) | 1920x1080 | Creciente: el procesador no alcanza a decodificar | Correcta, pero sobre cuadros atrasados |
+| stream1 + FFmpeg (decodificación por hardware) | 1920x1080 | ~5 s, fluido | Correcta, pero con demasiado atraso para un portón |
+| stream2 + OpenCV | 640x360 | ~1 s | Igual de buena a las distancias probadas |
+
+- Decisión: stream2. Cumple el requisito (auto detenido frente al portón) con el menor atraso y la configuración más simple.
+- Medidas para evitar cuadros atrasados: un hilo de lectura que guarda solo el cuadro más reciente, transporte RTSP por TCP y reconexión automática.
+- Reglas en vivo: confirmación (2 lecturas iguales seguidas) y espera de 30 s desde la última vez que se vio la patente.
+- Visor web de diagnóstico (Flask + MJPEG) para probar distancias y ángulos.

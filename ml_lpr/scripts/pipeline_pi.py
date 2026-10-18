@@ -25,6 +25,10 @@ def limpiar_texto(texto):
 def corregir_y_validar(texto):
     if len(texto) != 6:
         return None
+    # 1. Si el OCR ya entregó un formato válido, se respeta tal cual
+    if RE_NUEVA.match(texto) or RE_ANTIGUA.match(texto):
+        return texto
+    # 2. Si no calza con ninguno, se intentan las correcciones por posición
     nueva = "".join(A_LETRA.get(c, c) for c in texto[:4]) + \
             "".join(A_NUMERO.get(c, c) for c in texto[4:])
     if RE_NUEVA.match(nueva):
