@@ -96,10 +96,10 @@ class LectorCamara:
 
 
 def leer_patente(detector, ocr, cuadro, temporal, conf_min=0.5):
-    """Detecta, recorta, lee y valida. Devuelve (patente, texto_crudo, caja)."""
+    """Detecta, recorta, lee y valida. Devuelve (patente, texto_crudo, caja, confianza_ocr)."""
     resultado = detector(cuadro, imgsz=640, conf=conf_min, verbose=False)[0]
     if len(resultado.boxes) == 0:
-        return None, None, None
+        return None, None, None, None
     areas = resultado.boxes.xywh[:, 2] * resultado.boxes.xywh[:, 3]
     i = int(areas.argmax())
     x1, y1, x2, y2 = (int(v) for v in resultado.boxes.xyxy[i].tolist())
@@ -109,10 +109,19 @@ def leer_patente(detector, ocr, cuadro, temporal, conf_min=0.5):
     rx1, ry1 = max(0, int(x1 - mx)), max(0, int(y1 - my))
     rx2, ry2 = min(ancho, int(x2 + mx)), min(alto, int(y2 + my))
     cv2.imwrite(str(temporal), cuadro[ry1:ry2, rx1:rx2])
-    prediccion = ocr.run(str(temporal))[0]
-    texto = prediccion.plate if hasattr(prediccion, "plate") else str(prediccion)
+
+    prediccion = ocr.run(str(temporal), return_confidence=True)[0]
+    texto = prediccion.plate
     crudo = limpiar_texto(texto)
-    return corregir_y_validar(crudo), crudo, caja
+
+    # Confianza del OCR: la del carácter menos seguro (0 a 100)
+    confianza = None
+    if prediccion.char_probs is not None and texto:
+        probs = np.ravel(prediccion.char_probs)[:len(texto)]
+        if len(probs) > 0:
+            confianza = round(float(probs.min()) * 100, 1)
+
+    return corregir_y_validar(crudo), crudo, caja, confianza
 
 FPS_LECTURA = 10  # cuadros por segundo que FFmpeg entrega a Python
 

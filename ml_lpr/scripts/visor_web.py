@@ -1,8 +1,9 @@
-"""Visor web de prueba: video en vivo con las detecciones y las patentes confirmadas."""
+"""Visor web de prueba: video en vivo con las detecciones, patentes confirmadas y envío al backend."""
 import threading
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 
 import cv2
 from fast_plate_ocr import LicensePlateRecognizer
@@ -13,11 +14,15 @@ from lpr_comun import BASE, LectorCamara, LectorCamaraFFmpeg, leer_patente, url_
 
 MODELO = BASE / "modelos" / "v1_roboflow_n640_ncnn_model"
 STREAM = "stream2"
-USAR_FFMPEG = False     # False = volver al lector de OpenCV
-CONFIRMACIONES = 2      # lecturas iguales seguidas para validar una patente
-ESPERA_REPETIDA = 30    # segundos sin ver la patente antes de volver a informarla
-ANCHO_VISOR = 960       # ancho del video en la página (más chico = menos carga)
-FPS_VISOR = 5
+USAR_FFMPEG = False      # con stream2 basta el lector de OpenCV
+ENVIAR_AL_BACKEND = False # False = solo visor, sin registrar en el backend
+CONFIRMACIONES = 2       # lecturas iguales seguidas para validar una patente
+ESPERA_REPETIDA = 30     # segundos sin ver la patente antes de volver a informarla
+ANCHO_VISOR = 640
+FPS_VISOR = 3
+TEMPORAL = Path("/dev/shm/recorte_tmp.jpg")  # en RAM: evita desgastar la microSD
+
+COLORES = {"autorizado": "#22c55e", "visita": "#3b82f6", "denegado": "#ef4444"}
 
 
 class Estado:
@@ -35,13 +40,13 @@ class Estado:
 
 estado = Estado()
 camara = None
+backend = None
 
 
 def procesar():
     """Hilo de análisis: lee patentes del último cuadro y aplica confirmación y espera."""
     detector = YOLO(str(MODELO), task="detect")
     ocr = LicensePlateRecognizer("cct-s-v2-global-model")
-    temporal = BASE / "recorte_tmp.jpg"
     candidata, conteo, ultima_vez = None, 0, {}
     print("Modelos cargados, analizando...")
 
@@ -52,13 +57,15 @@ def procesar():
             continue
 
         inicio = time.perf_counter()
-        patente, crudo, caja = leer_patente(detector, ocr, cuadro, temporal)
+        patente, crudo, caja, confianza = leer_patente(detector, ocr, cuadro, TEMPORAL)
         ms = (time.perf_counter() - inicio) * 1000
         ahora = time.time()
         confirmada = False
 
         if patente is None:
             candidata, conteo = None, 0
+            if caja is None:
+                time.sleep(0.5)  # sin patente a la vista: analizar menos seguido
         elif patente in ultima_vez and ahora - ultima_vez[patente] < ESPERA_REPETIDA:
             ultima_vez[patente] = ahora  # ya informada y sigue a la vista
             confirmada = True
@@ -71,15 +78,15 @@ def procesar():
                 ultima_vez[patente] = ahora
                 candidata, conteo = None, 0
                 confirmada = True
-                # Formato del evento: el mismo que recibirá el backend más adelante
-                evento = {"patente": patente,
+                resultado = backend.registrar_deteccion(patente, confianza, cuadro, caja) if backend else "sin backend"
+                evento = {"patente": patente, "confianza": confianza, "resultado": resultado,
                           "hora": datetime.now().isoformat(timespec="seconds")}
-                print(f"[{evento['hora']}] PATENTE DETECTADA: {patente}")
+                print(f"[{evento['hora']}] PATENTE DETECTADA: {patente} ({confianza}%) -> {resultado}")
                 with estado.lock:
                     estado.eventos.appendleft(evento)
 
         with estado.lock:
-            estado.lectura = {"crudo": crudo or "", "patente": patente or "",
+            estado.lectura = {"crudo": crudo or "", "patente": patente or "", "confianza": confianza,
                               "ms": round(ms), "hora": datetime.now().strftime("%H:%M:%S")}
             if caja:
                 estado.caja = caja
@@ -97,14 +104,14 @@ def generar_video():
             continue
         with estado.lock:
             caja, texto, color, hora = estado.caja, estado.texto_caja, estado.color, estado.hora_caja
-        if caja and time.time() - hora < 1.5:  # solo si la detección es reciente
+        if caja and time.time() - hora < 1.5:
             x1, y1, x2, y2 = caja
-            cv2.rectangle(cuadro, (x1, y1), (x2, y2), color, 3)
-            cv2.putText(cuadro, texto, (x1, max(35, y1 - 12)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+            cv2.rectangle(cuadro, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(cuadro, texto, (x1, max(25, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         alto, ancho = cuadro.shape[:2]
-        chico = cv2.resize(cuadro, (ANCHO_VISOR, int(alto * ANCHO_VISOR / ancho)))
-        ok, jpg = cv2.imencode(".jpg", chico, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        if ancho != ANCHO_VISOR:
+            cuadro = cv2.resize(cuadro, (ANCHO_VISOR, int(alto * ANCHO_VISOR / ancho)))
+        ok, jpg = cv2.imencode(".jpg", cuadro, [cv2.IMWRITE_JPEG_QUALITY, 70])
         if ok:
             yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg.tobytes() + b"\r\n"
         time.sleep(1 / FPS_VISOR)
@@ -117,31 +124,35 @@ PAGINA = """<!doctype html>
   body { font-family: sans-serif; background: #111; color: #eee; margin: 16px; }
   .contenedor { display: flex; gap: 16px; flex-wrap: wrap; }
   img { max-width: 100%; border: 1px solid #444; }
-  .panel { min-width: 280px; }
+  .panel { min-width: 320px; }
   td, th { padding: 4px 10px; text-align: left; }
   .pat { font-family: monospace; font-size: 22px; letter-spacing: 2px; }
+  .res { font-weight: bold; text-transform: uppercase; }
 </style></head><body>
 <h2>SegurIA LPR · Visor de prueba</h2>
 <div class="contenedor">
-  <img src="/video" width="960">
+  <img src="/video" width="640">
   <div class="panel">
     <h3>Última lectura</h3>
     <div id="lectura">—</div>
     <h3>Patentes confirmadas</h3>
     <table id="eventos"></table>
+    <p style="color:#888;font-size:13px">Resultado preliminar según la copia local. El oficial lo registra el backend.</p>
   </div>
 </div>
 <script>
+const COLORES = """ + str(COLORES).replace("'", '"') + """;
 async function actualizar() {
   try {
     const r = await fetch('/estado');
     const d = await r.json();
     const l = d.lectura;
     document.getElementById('lectura').innerHTML = !l.hora ? '—'
-      : l.crudo ? `${l.hora} · OCR: <b>${l.crudo}</b> → <span class="pat">${l.patente || 'inválida'}</span> (${l.ms} ms)`
+      : l.crudo ? `${l.hora} · OCR: <b>${l.crudo}</b> → <span class="pat">${l.patente || 'inválida'}</span> (${l.confianza ?? '–'}% · ${l.ms} ms)`
       : `${l.hora} · sin patente a la vista (${l.ms} ms)`;
-    document.getElementById('eventos').innerHTML = '<tr><th>Hora</th><th>Patente</th></tr>' +
-      d.eventos.map(e => `<tr><td>${e.hora.slice(11)}</td><td class="pat">${e.patente}</td></tr>`).join('');
+    document.getElementById('eventos').innerHTML = '<tr><th>Hora</th><th>Patente</th><th>Resultado</th></tr>' +
+      d.eventos.map(e => `<tr><td>${e.hora.slice(11)}</td><td class="pat">${e.patente}</td>` +
+        `<td class="res" style="color:${COLORES[e.resultado] || '#aaa'}">${e.resultado}</td></tr>`).join('');
   } catch (e) {}
 }
 setInterval(actualizar, 1000);
@@ -169,6 +180,10 @@ def ver_estado():
 
 
 if __name__ == "__main__":
+    if ENVIAR_AL_BACKEND:
+        from integracion import ClienteBackend
+        backend = ClienteBackend()
+
     print(f"Conectando a la cámara ({STREAM})...")
     lector = LectorCamaraFFmpeg if USAR_FFMPEG else LectorCamara
     camara = lector(url_camara(STREAM))
