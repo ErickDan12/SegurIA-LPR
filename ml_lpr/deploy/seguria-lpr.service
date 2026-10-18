@@ -1,0 +1,15 @@
+[Unit]
+Description=SegurIA LPR - lectura de patentes y envío al backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=admin
+WorkingDirectory=/home/admin/seguria-lpr
+ExecStart=/home/admin/seguria-lpr/venv/bin/python scripts/visor_web.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

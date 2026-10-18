@@ -48,6 +48,56 @@ Cámara (RTSP) → Raspberry Pi: detección + lectura de patentes
 
 El detalle de cada prueba, el análisis de errores y las decisiones están en [`ml_lpr/registro_entrenamientos.md`](ml_lpr/registro_entrenamientos.md).
 
+## Instalación en la Raspberry Pi
+
+Requisitos: Raspberry Pi 4 con Raspberry Pi OS Lite 64-bit, el proyecto en
+`~/seguria-lpr` con su entorno virtual, y el modelo exportado a NCNN en
+`modelos/`.
+
+### 1. Configuración (archivos fuera del repositorio)
+
+`~/seguria-lpr/camara.ini`: IP, usuario y contraseña de la cámara (cuenta local RTSP).
+
+`~/seguria-lpr/servidor.ini`: credenciales del equipo, creadas por el
+administrador del recinto en "Cámaras y equipos":
+
+```ini
+[servidor]
+url = https://seguria-lpr-backend.onrender.com
+identificador = RPI-SEGURIA-01
+api_key = <api key entregada por el panel>
+```
+
+Ambos archivos deben quedar con `chmod 600`.
+
+### 2. Arranque automático
+
+```bash
+sudo cp deploy/seguria-lpr.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now seguria-lpr
+```
+
+El servicio arranca al encender el equipo y se reinicia solo si falla.
+
+| Acción | Comando |
+|---|---|
+| Ver estado | `systemctl status seguria-lpr` |
+| Ver registros en vivo | `journalctl -u seguria-lpr -f` |
+| Aplicar cambios | `sudo systemctl restart seguria-lpr` |
+
+### 3. Verificación
+
+- Visor de diagnóstico: `http://<ip-raspberry>:5000`.
+- En el panel, el equipo aparece en línea y las detecciones llegan al monitor del guardia.
+
+### Funcionamiento sin conexión
+
+La Raspberry Pi mantiene una copia local de las patentes autorizadas y entrega
+un resultado preliminar al instante. Si no hay internet, las detecciones quedan
+en `cola/` y se envían al reconectar, con su fecha y hora original. El resultado
+oficial lo registra el backend.
+
 ## Datos y privacidad
 
 - Las imágenes reales usadas para evaluar el sistema se utilizan con autorización, solo con fines de evaluación, y **no se publican** en este repositorio.
